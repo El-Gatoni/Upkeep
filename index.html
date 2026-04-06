@@ -1,0 +1,166 @@
+<!DOCTYPE html><html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Upkeep V4</title><style>
+body{margin:0;font-family:-apple-system;background:#020617;color:white}
+.container{padding:16px;padding-bottom:100px;max-width:430px;margin:auto}
+.card{background:#0f172a;border-radius:22px;padding:16px;margin-bottom:16px;box-shadow:0 10px 25px rgba(0,0,0,0.6)}
+h2,h3{margin:0 0 10px}
+button,input,select{width:100%;padding:12px;border-radius:14px;border:none;margin-top:8px}
+button{background:#22c55e;color:white;font-weight:bold}
+.tabbar{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#020617;padding:14px}
+.tabbar button{background:none;color:#64748b;font-size:24px}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.left{display:flex;align-items:center;gap:12px}
+.icon{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px}
+.badge{background:#10b981;padding:4px 8px;border-radius:999px;font-size:12px}
+.small{font-size:12px;color:#94a3b8}
+.green{background:#34d399}
+.orange{background:#fb923c}
+.red{background:#ef4444}
+.blue{background:#60a5fa}
+</style></head>
+<body><div class="container" id="app"></div><div class="tabbar">
+<button onclick="nav('home')">🏡</button>
+<button onclick="nav('maintenance')">🛠️</button>
+<button onclick="nav('expenses')">💳</button>
+<button onclick="nav('stats')">📈</button>
+<button onclick="nav('settings')">⚙️</button>
+</div><script>
+let state = JSON.parse(localStorage.getItem('upkeep')||'{"vehicles":[],"selected":0,"expenses":[],"maintenance":[]}');
+let page='home';
+let detailType=null;
+
+function save(){localStorage.setItem('upkeep',JSON.stringify(state));render();}
+function nav(p){page=p;detailType=null;render();}
+
+function monthsDiff(date){return Math.floor((new Date()-new Date(date))/(1000*60*60*24*30));}
+function statusColor(m){if(m<6) return 'green'; if(m<12) return 'orange'; return 'red';}
+
+function render(){
+ let app=document.getElementById('app');
+ let vehicle=state.vehicles[state.selected]||{};
+
+ // HOME
+ if(page==='home'){
+  app.innerHTML=`<h2>Accueil</h2>
+  ${vehicle.brand?`<div class='card'><b>${vehicle.brand} ${vehicle.model}</b><br><span class='small'>${vehicle.plate}</span></div>`:''}
+  <div class='card small'>Configure ton véhicule ⚙️ puis ajoute entretien et dépenses.</div>`;
+ }
+
+ // MAINTENANCE LIST
+ if(page==='maintenance' && !detailType){
+  let types=['Entretien','Contrôle technique','Assurance','Carburant','Autre'];
+  app.innerHTML='<h3>Entretien</h3>';
+
+  types.forEach(t=>{
+    let list=state.maintenance.filter(m=>m.type===t);
+    let last=list[list.length-1];
+    let months=last?monthsDiff(last.date):null;
+    let color=months!==null?statusColor(months):'blue';
+
+    app.innerHTML+=`<div class='row' onclick="openDetail('${t}')">
+      <div class='left'>
+        <div class='icon ${color}'>🛠️</div>
+        <div>
+          <b>${t} <span class='badge'>${list.length}</span></b><br>
+          <span class='small'>${last?`Il y a ${months} mois`:'Aucune donnée'}</span>
+        </div>
+      </div>
+      <div>›</div>
+    </div>`;
+  });
+
+  app.innerHTML+=`<div class='card'>
+  <select id='type'>${types.map(t=>`<option>${t}</option>`)}</select>
+  <input id='date' type='date'>
+  <button onclick='addMaintenance()'>Ajouter</button></div>`;
+ }
+
+ // MAINTENANCE DETAIL
+ if(page==='maintenance' && detailType){
+  let list=state.maintenance.filter(m=>m.type===detailType);
+  app.innerHTML=`<h3>${detailType}</h3>
+  <button onclick="detailType=null;render()">⬅ Retour</button>`;
+
+  list.reverse().forEach(m=>{
+    app.innerHTML+=`<div class='card small'>${m.date}</div>`;
+  });
+ }
+
+ // EXPENSES
+ if(page==='expenses'){
+  let total=state.expenses.reduce((a,b)=>a+Number(b.amount||0),0);
+  app.innerHTML=`<h3>Dépenses</h3>
+  <div class='card'>Total : ${total}€</div>
+  <div class='card'>
+  <select id='type'>
+  <option>Essence</option><option>Entretien</option><option>Réparation</option><option>Assurance</option><option>Autre</option>
+  </select>
+  <input id='amount'><input id='date' type='date'>
+  <button onclick='addExpense()'>Ajouter</button></div>`;
+ }
+
+ // STATS
+ if(page==='stats'){
+  app.innerHTML=`<h3>Stats</h3><canvas id='c'></canvas>`;
+  let ctx=c.getContext('2d');
+  let data=Array(12).fill(0);
+  state.expenses.forEach(e=>{if(e.date)data[new Date(e.date).getMonth()]+=Number(e.amount||0)});
+  let max=Math.max(...data,1);
+  data.forEach((v,i)=>ctx.fillRect(i*25,200-(v/max*180),20,v/max*180));
+ }
+
+ // SETTINGS
+ if(page==='settings'){
+  app.innerHTML=`<h3>Paramètres</h3>
+  <div class='card'>
+  <input id='plate' placeholder='Plaque'>
+  <input id='brand' placeholder='Marque'>
+  <input id='model' placeholder='Modèle'>
+  <button onclick='addVehicle()'>Ajouter véhicule</button>
+  </div>
+
+  <div class='card'>
+  ${state.vehicles.map((v,i)=>`<div onclick='selectVehicle(${i})'>🚗 ${v.brand} ${v.model}</div>`).join('')}
+  </div>
+
+  <div class='card small'>⚠️ Sauvegarde locale → export JSON recommandé</div>
+
+  <div class='card'>
+  <button onclick='exportData()'>Exporter JSON</button>
+  <input type='file' onchange='importData(event)'>
+  </div>`;
+ }
+}
+
+function openDetail(t){detailType=t;render();}
+function addMaintenance(){state.maintenance.push({type:type.value,date:date.value});save();}
+function addExpense(){state.expenses.push({type:type.value,amount:amount.value,date:date.value});save();}
+
+function addVehicle(){
+ state.vehicles.push({plate:plate.value,brand:brand.value,model:model.value});
+ state.selected=state.vehicles.length-1;
+ save();
+}
+
+function selectVehicle(i){state.selected=i;save();}
+
+function exportData(){
+ const blob=new Blob([JSON.stringify(state)],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download='upkeep.json';
+ a.click();
+}
+
+function importData(e){
+ const reader=new FileReader();
+ reader.onload=()=>{state=JSON.parse(reader.result);save();};
+ reader.readAsText(e.target.files[0]);
+}
+
+render();
+</script></body>
+</html>
