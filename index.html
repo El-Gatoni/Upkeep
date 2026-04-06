@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upkeep</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#020617">
+
+<style>
+body{margin:0;font-family:Arial;background:#020617;color:white}
+.container{padding:16px;padding-bottom:90px}
+.card{background:#0f172a;border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:0 6px 20px rgba(0,0,0,0.5)}
+input,select,button{width:100%;padding:12px;border-radius:12px;border:none;margin-top:6px}
+button{background:#22c55e;color:white;font-weight:bold}
+.tabbar{position:fixed;bottom:0;left:0;right:0;background:#020617;display:flex;justify-content:space-around;padding:12px;border-top:1px solid #1e293b}
+.tabbar button{background:none;color:#64748b}
+.tabbar button.active{color:#22c55e}
+.small{font-size:12px;color:#94a3b8}
+.link{color:#38bdf8;font-size:12px}
+.car-img{width:100%;border-radius:14px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="container" id="app"></div>
+
+<div class="tabbar">
+<button onclick="setPage('home')">🏠</button>
+<button onclick="setPage('vehicles')">🚗</button>
+<button onclick="setPage('expenses')">💰</button>
+<button onclick="setPage('reminders')">🔔</button>
+<button onclick="setPage('settings')">⚙️</button>
+</div>
+
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js');}
+
+let state = JSON.parse(localStorage.getItem('upkeep')||'{"vehicles":[],"expenses":[],"reminders":[]}');
+let page='home';
+
+function save(){localStorage.setItem('upkeep',JSON.stringify(state));render();}
+function setPage(p){page=p;render();}
+
+function render(){
+ const app=document.getElementById('app');
+
+ if(page==='home'){
+  let v=state.vehicles[0];
+  let total=state.expenses.reduce((a,b)=>a+Number(b.amount||0),0);
+
+  app.innerHTML=`
+  <h2>🚗 Upkeep</h2>
+
+  ${v?`<div class="card">
+    <b>${v.brand} ${v.model}</b><br>
+    <span class="small">${v.plate}</span>
+    ${v.image?`<img src="${v.image}" class="car-img">`:''}
+  </div>`:''}
+
+  <div class="card">💰 ${total}€ dépensés</div>
+  <div class="card">🔔 ${state.reminders.length} rappels</div>
+  `;
+ }
+
+ if(page==='vehicles'){
+  app.innerHTML=`
+  <h3>Véhicules</h3>
+
+  ${state.vehicles.map(v=>`
+  <div class="card">
+   ${v.brand} ${v.model}<br>
+   <span class="small">${v.plate}</span>
+  </div>`).join('')}
+
+  <div class="card">
+  <h4>Ajouter</h4>
+  <input id="plate" placeholder="Immatriculation">
+  <a class="link" href="https://siv-auto.fr" target="_blank">🔍 Trouver infos véhicule</a>
+  <input id="brand" placeholder="Marque">
+  <input id="model" placeholder="Modèle">
+  <input id="year" placeholder="Année">
+  <input id="image" placeholder="URL image véhicule (optionnel)">
+  <button onclick="addVehicle()">Ajouter</button>
+  </div>`;
+ }
+
+ if(page==='expenses'){
+  app.innerHTML=`
+  <h3>Dépenses</h3>
+
+  <div class="card">
+  <select id="type">
+   <option>Essence</option>
+   <option>Assurance</option>
+   <option>Réparation</option>
+  </select>
+  <input id="amount" placeholder="Montant">
+  <input id="date" type="date">
+  <button onclick="addExpense()">Ajouter</button>
+  </div>
+
+  ${state.expenses.map(e=>`
+  <div class="card small">${e.date} - ${e.type} : ${e.amount}€</div>`).join('')}
+  `;
+ }
+
+ if(page==='reminders'){
+  app.innerHTML=`
+  <h3>Rappels</h3>
+
+  <div class="card">
+  <input id="title" placeholder="Titre">
+  <input id="date" type="date">
+  <button onclick="addReminder()">Ajouter</button>
+  </div>
+
+  ${state.reminders.map(r=>`
+  <div class="card small">${r.title} - ${r.date}</div>`).join('')}
+  `;
+ }
+
+ if(page==='settings'){
+  app.innerHTML=`
+  <h3>⚙️ Paramètres</h3>
+
+  <div class="card small">
+  ⚠️ Données stockées localement dans le navigateur (cache).\nPensez à exporter régulièrement votre fichier JSON.
+  </div>
+
+  <div class="card">
+  <button onclick="exportData()">Exporter JSON</button>
+  <input type="file" onchange="importData(event)">
+  </div>
+  `;
+ }
+}
+
+function addVehicle(){
+ state.vehicles.push({plate:plate.value,brand:brand.value,model:model.value,year:year.value,image:image.value});
+ save();
+}
+
+function addExpense(){
+ state.expenses.push({type:type.value,amount:amount.value,date:date.value});
+ save();
+}
+
+function addReminder(){
+ state.reminders.push({title:title.value,date:date.value});
+ notify(title.value,date.value);
+ save();
+}
+
+function exportData(){
+ const blob=new Blob([JSON.stringify(state)],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download='upkeep.json';
+ a.click();
+}
+
+function importData(e){
+ const reader=new FileReader();
+ reader.onload=()=>{state=JSON.parse(reader.result);save();};
+ reader.readAsText(e.target.files[0]);
+}
+
+function notify(title,date){
+ if(Notification.permission==='granted'){
+  let target=new Date(date);
+  let now=new Date();
+  let diff=target-now-(30*24*60*60*1000);
+  if(diff>0){setTimeout(()=>new Notification('Rappel : '+title),diff);}
+ }
+}
+
+if('Notification' in window){Notification.requestPermission();}
+
+render();
+</script>
+</body>
+</html>
+
+
+/* ====== manifest.json ====== */
+{
+  "name": "Upkeep",
+  "short_name": "Upkeep",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+
+
+/* ====== sw.js ====== */
+self.addEventListener('install', e=>{
+ self.skipWaiting();
+});
+
+self.addEventListener('fetch', e=>{
+ e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));
+});
