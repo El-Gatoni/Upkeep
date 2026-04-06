@@ -1,43 +1,33 @@
-<!DOCTYPE html>
-<html lang="fr">
+<!DOCTYPE html><html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Upkeep</title>
-
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#020617">
-
-<style>
+<title>Upkeep</title><link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#020617"><style>
 body{margin:0;font-family:Arial;background:#020617;color:white}
-.container{padding:16px;padding-bottom:90px}
-.card{background:#0f172a;border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:0 6px 20px rgba(0,0,0,0.5)}
-input,select,button{width:100%;padding:12px;border-radius:12px;border:none;margin-top:6px}
+.container{padding:16px;padding-bottom:100px}
+.card{background:#0f172a;border-radius:20px;padding:16px;margin-bottom:16px;box-shadow:0 6px 20px rgba(0,0,0,0.5)}
+h2,h3{margin-top:0}
+input,select,button{width:100%;padding:12px;border-radius:12px;border:none;margin-top:8px}
 button{background:#22c55e;color:white;font-weight:bold}
-.tabbar{position:fixed;bottom:0;left:0;right:0;background:#020617;display:flex;justify-content:space-around;padding:12px;border-top:1px solid #1e293b}
-.tabbar button{background:none;color:#64748b}
+.tabbar{position:fixed;bottom:0;left:0;right:0;background:#020617;display:flex;justify-content:space-around;padding:14px;border-top:1px solid #1e293b}
+.tabbar button{background:none;color:#64748b;font-size:18px}
 .tabbar button.active{color:#22c55e}
 .small{font-size:12px;color:#94a3b8}
 .link{color:#38bdf8;font-size:12px}
 .car-img{width:100%;border-radius:14px;margin-top:10px}
-</style>
-</head>
-<body>
-
-<div class="container" id="app"></div>
-
-<div class="tabbar">
+canvas{width:100%!important;height:200px!important}
+</style></head>
+<body><div class="container" id="app"></div><div class="tabbar">
 <button onclick="setPage('home')">🏠</button>
 <button onclick="setPage('vehicles')">🚗</button>
 <button onclick="setPage('expenses')">💰</button>
-<button onclick="setPage('reminders')">🔔</button>
+<button onclick="setPage('stats')">📊</button>
 <button onclick="setPage('settings')">⚙️</button>
-</div>
-
-<script>
+</div><script>
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js');}
 
-let state = JSON.parse(localStorage.getItem('upkeep')||'{"vehicles":[],"expenses":[],"reminders":[]}');
+let state = JSON.parse(localStorage.getItem('upkeep')||'{"vehicles":[],"expenses":[]}');
 let page='home';
 
 function save(){localStorage.setItem('upkeep',JSON.stringify(state));render();}
@@ -59,8 +49,7 @@ function render(){
     ${v.image?`<img src="${v.image}" class="car-img">`:''}
   </div>`:''}
 
-  <div class="card">💰 ${total}€ dépensés</div>
-  <div class="card">🔔 ${state.reminders.length} rappels</div>
+  <div class="card">💰 ${total}€ total</div>
   `;
  }
 
@@ -77,11 +66,11 @@ function render(){
   <div class="card">
   <h4>Ajouter</h4>
   <input id="plate" placeholder="Immatriculation">
-  <a class="link" href="https://siv-auto.fr" target="_blank">🔍 Trouver infos véhicule</a>
+  <a class="link" href="https://siv-auto.fr" target="_blank">🔍 Infos véhicule</a>
   <input id="brand" placeholder="Marque">
   <input id="model" placeholder="Modèle">
   <input id="year" placeholder="Année">
-  <input id="image" placeholder="URL image véhicule (optionnel)">
+  <input id="image" placeholder="URL image">
   <button onclick="addVehicle()">Ajouter</button>
   </div>`;
  }
@@ -106,19 +95,11 @@ function render(){
   `;
  }
 
- if(page==='reminders'){
+ if(page==='stats'){
   app.innerHTML=`
-  <h3>Rappels</h3>
-
-  <div class="card">
-  <input id="title" placeholder="Titre">
-  <input id="date" type="date">
-  <button onclick="addReminder()">Ajouter</button>
-  </div>
-
-  ${state.reminders.map(r=>`
-  <div class="card small">${r.title} - ${r.date}</div>`).join('')}
-  `;
+  <h3>📊 Statistiques</h3>
+  <div class="card"><canvas id="chart"></canvas></div>`;
+  drawChart();
  }
 
  if(page==='settings'){
@@ -126,7 +107,7 @@ function render(){
   <h3>⚙️ Paramètres</h3>
 
   <div class="card small">
-  ⚠️ Données stockées localement dans le navigateur (cache).\nPensez à exporter régulièrement votre fichier JSON.
+  ⚠️ Données stockées localement. Pensez à exporter régulièrement.
   </div>
 
   <div class="card">
@@ -147,12 +128,6 @@ function addExpense(){
  save();
 }
 
-function addReminder(){
- state.reminders.push({title:title.value,date:date.value});
- notify(title.value,date.value);
- save();
-}
-
 function exportData(){
  const blob=new Blob([JSON.stringify(state)],{type:'application/json'});
  const a=document.createElement('a');
@@ -167,51 +142,22 @@ function importData(e){
  reader.readAsText(e.target.files[0]);
 }
 
-function notify(title,date){
- if(Notification.permission==='granted'){
-  let target=new Date(date);
-  let now=new Date();
-  let diff=target-now-(30*24*60*60*1000);
-  if(diff>0){setTimeout(()=>new Notification('Rappel : '+title),diff);}
- }
-}
+function drawChart(){
+ let ctx=document.getElementById('chart').getContext('2d');
+ let months=Array(12).fill(0);
+ state.expenses.forEach(e=>{
+  let m=new Date(e.date).getMonth();
+  months[m]+=Number(e.amount||0);
+ });
 
-if('Notification' in window){Notification.requestPermission();}
+ let max=Math.max(...months,1);
+ ctx.clearRect(0,0,300,200);
+ months.forEach((v,i)=>{
+  let h=(v/max)*150;
+  ctx.fillRect(i*25,180-h,15,h);
+ });
+}
 
 render();
-</script>
-</body>
+</script></body>
 </html>
-
-
-/* ====== manifest.json ====== */
-{
-  "name": "Upkeep",
-  "short_name": "Upkeep",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
-  "icons": [
-    {
-      "src": "icon.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
-}
-
-
-/* ====== sw.js ====== */
-self.addEventListener('install', e=>{
- self.skipWaiting();
-});
-
-self.addEventListener('fetch', e=>{
- e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));
-});
